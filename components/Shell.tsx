@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { profile, projects, stack } from "@/lib/data";
+import { linkify } from "./linkify";
 
 const routes = [
   { id: "top", m: "GET", p: "/bilal" },
@@ -14,26 +14,22 @@ const routes = [
 
 type Line = { k: "in" | "out"; t: string };
 
-function answer(raw: string): string {
+function local(raw: string): string | null {
   const q = raw.trim().toLowerCase();
-  if (!q) return "";
-  if (q === "help" || q === "?") return "try: whoami · projects · stack · contact · hire · fetch pending invoices · create customer · clear";
-  if (q.includes("who")) return `${profile.name}. Full-stack dev. PHP & Laravel at the core, plus Flutter, Next.js, React and Angular. Builds APIs, real-time systems and AI agents.`;
-  if (q.includes("project") || q.includes("work")) return projects.map((p, i) => `${i + 1}. ${p.name}`).join("\n");
-  if (q.includes("stack") || q.includes("skill")) return stack.map((s) => `${s.g}: ${s.items.slice(0, 4).join(", ")}`).join("\n");
+  if (q === "help" || q === "?") return "ask me anything about Bilal in plain English: projects, skills, experience, hiring, his CV.\nor try: fetch pending invoices · create customer · clear";
   if (q.includes("pending invoice")) return JSON.stringify({ tool: "invoices.list", filter: { status: "pending" }, count: 3, note: "this is how the POS assistant I built on the Anthropic API behaves" }, null, 1);
   if (q.includes("create") && q.includes("customer")) return JSON.stringify({ tool: "customers.create", status: 201, note: "plain language in, Laravel action out" }, null, 1);
-  if (q.includes("contact") || q.includes("email") || q.includes("phone")) return `${profile.email}\n${profile.phone}`;
-  if (q.includes("hire") || q.includes("available")) return `Open to work. Email ${profile.email} and you'll get a reply.`;
   if (q.includes("sudo")) return "nice try. permission denied.";
-  return `404: no route for "${raw}". type help.`;
+  return null;
 }
 
 export default function Shell({ children }: { children: ReactNode }) {
   const [active, setActive] = useState("top");
   const [open, setOpen] = useState(false);
   const [val, setVal] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ k: "out", t: "console ready. type help." }]);
+  const [lines, setLines] = useState<Line[]>([{ k: "out", t: "console ready. ask me anything about Bilal, or type help." }]);
+  const [busy, setBusy] = useState(false);
+  const abort = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const glow = useRef<HTMLDivElement>(null);
@@ -62,15 +58,46 @@ export default function Shell({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 30); }, [open]);
-  useEffect(() => { bodyRef.current?.scrollTo({ top: 1e6 }); }, [lines]);
+  useEffect(() => { bodyRef.current?.scrollTo({ top: 1e6, behavior: "smooth" }); }, [lines]);
+  useEffect(() => () => abort.current?.abort(), []);
 
-  const run = (e: React.FormEvent) => {
+  const patch = (t: string) => setLines((l) => { const c = l.slice(); c[c.length - 1] = { k: "out", t }; return c; });
+
+  const run = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = val.trim();
-    if (!q) return;
+    if (!q || busy) return;
     setVal("");
     if (q === "clear") return setLines([]);
-    setLines((l) => [...l, { k: "in", t: q }, { k: "out", t: answer(q) }]);
+    const quick = local(q);
+    if (quick !== null) return setLines((l) => [...l, { k: "in", t: q }, { k: "out", t: quick }]);
+
+    const history = [...lines.filter((l) => l.t && !l.t.startsWith("console ready")), { k: "in" as const, t: q }]
+      .filter((l) => !l.t.startsWith("{") && !l.t.startsWith("ask me anything"))
+      .map((l) => ({ role: l.k === "in" ? "user" : "assistant", content: l.t }));
+    setLines((l) => [...l, { k: "in", t: q }, { k: "out", t: "" }]);
+    setBusy(true);
+    const ac = new AbortController();
+    abort.current = ac;
+    try {
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: history }), signal: ac.signal });
+      if (!res.ok || !res.body) throw new Error();
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += dec.decode(value, { stream: true });
+        patch(acc);
+      }
+      if (!acc.trim()) throw new Error();
+    } catch (err) {
+      if ((err as Error)?.name !== "AbortError") patch("connection dropped. try again, or email bilalfiaz747@gmail.com");
+    } finally {
+      setBusy(false);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
   };
 
   return (
@@ -101,11 +128,15 @@ export default function Shell({ children }: { children: ReactNode }) {
           <div className="term" onClick={(e) => e.stopPropagation()}>
             <div className="term-h"><span>bilal@api ~ console</span><button onClick={() => setOpen(false)}>esc</button></div>
             <div className="term-b" ref={bodyRef}>
-              {lines.map((l, i) => (<pre key={i} className={l.k}>{l.k === "in" ? "› " : ""}{l.t}</pre>))}
+              {lines.map((l, i) => (
+                <pre key={i} className={l.k}>
+                  {l.k === "in" ? "› " + l.t : l.t ? linkify(l.t, () => setOpen(false)) : <span className="cb-typing"><i /><i /><i /></span>}
+                </pre>
+              ))}
             </div>
             <form onSubmit={run} className="term-i">
               <span>›</span>
-              <input ref={inputRef} value={val} onChange={(e) => setVal(e.target.value)} placeholder="ask me anything: projects, stack, hire…" spellCheck={false} />
+              <input ref={inputRef} value={val} onChange={(e) => setVal(e.target.value)} placeholder={busy ? "thinking…" : "ask me anything: what can you do for me?"} disabled={busy} spellCheck={false} />
             </form>
           </div>
         </div>

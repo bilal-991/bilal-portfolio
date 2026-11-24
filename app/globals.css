@@ -249,3 +249,6 @@ html{color-scheme:dark}
 .cb-a:hover{text-decoration-color:var(--lime)}
 .cb-dl{display:inline-block;margin:2px 0;padding:6px 14px;border-radius:99px;background:var(--lime);color:#000;font-weight:700;text-decoration:none}
 .cb-dl:hover{box-shadow:0 8px 28px -6px rgba(200,255,61,.6)}
+.term-b .out .cb-a{font-family:inherit}
+.term-b .cb-typing{padding:2px 0}
+.term-i input:disabled{opacity:.6}
