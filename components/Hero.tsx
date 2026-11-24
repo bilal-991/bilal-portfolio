@@ -55,6 +55,7 @@ export default function Hero() {
       <div className="cta">
         <a className="btn solid" href="#contact">Hire me →</a>
         <a className="btn" href="#work">See the work</a>
+        <a className="btn" href="/Muhammad_Bilal_CV.pdf" download="Muhammad_Bilal_CV.pdf">Download CV ↓</a>
         <span className="hint">psst, press <kbd>⌘K</kbd> and talk to the console</span>
       </div>
     </section>

@@ -3,6 +3,7 @@ import Hero from "@/components/Hero";
 import Work from "@/components/Work";
 import Flows from "@/components/Flows";
 import Reveal from "@/components/Reveal";
+import Chatbot from "@/components/Chatbot";
 import { log, marquee, other, profile, stack } from "@/lib/data";
 
 function Head({ n, route, title }: { n: string; route: string; title: React.ReactNode }) {
@@ -20,6 +21,7 @@ export default function Page() {
   const loop = [...marquee, ...marquee];
   return (
     <Shell>
+      <Chatbot />
       <Hero />
 
       <div className="marquee" aria-hidden>
@@ -93,6 +95,7 @@ export default function Page() {
 }`}</pre>
             <div className="contacts">
               <a className="btn solid" href={`mailto:${profile.email}`}>Send the request →</a>
+              <a className="btn" href="/Muhammad_Bilal_CV.pdf" download="Muhammad_Bilal_CV.pdf">Download CV ↓</a>
               <a className="btn wa" href={`https://wa.me/${profile.phoneHref.replace("+", "")}`} target="_blank" rel="noreferrer"><span className="wdot" />WhatsApp me</a>
             </div>
           </div>
